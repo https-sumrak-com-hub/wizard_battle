@@ -1,4 +1,5 @@
 import pygame as p
+from pygame.constants import K_DOWN, K_LCTRL, K_SPACE
 
 p.init()
 
@@ -8,7 +9,7 @@ SCREEN_HEIGHT = 550
 PERS_WDT = 300
 PERS_HGT = 375
 
-FPS = 60
+FPS = 24
 
 font = p.font.Font(None, 40)
 
@@ -27,33 +28,161 @@ class Player(p.sprite.Sprite):
     def __init__(self):
         super().__init__()
 
-        self.load_animations()
+        self.anim_mode = "stay"
+        self.side = "right"
+        self.anim_type = f"{self.anim_mode}_{self.side}"
 
-        self.image = self.idle_anim_right[0]
-        self.current_image = 0
-        self.animations = self.idle_anim_right
+        self.wizard_type = "fire"  #may be lightning
+        
+        self.animations = self.load_animations()
 
-        self.time = p.time.get_ticks()
-        self.interval = 150
-
+        self.image_num = 0
+        self.image = self.animations[self.anim_type][self.image_num]
         self.rect = self.image.get_rect()
         self.rect.center = (100, SCREEN_HEIGHT // 2)
+        self.time = 100
+        self.interval = 480
+
+    def movement_checker(self):
+        key = p.key.get_pressed()
+        if key[p.K_a] or key[p.K_d]:
+            self.anim_mode = "move"
+
+            if key[p.K_a]:
+                if 0 <= self.rect.bottomleft[0] <= SCREEN_WIDTH:
+                    self.side = "left"
+                    self.animation_choice()
+                    self.rect[0] -= 10
+
+            if key[p.K_d]:
+                if 0 <= self.rect.bottomright[0] <= SCREEN_WIDTH:
+                    self.side = "right"
+                    self.animation_choice()
+                    self.rect[0] += 10
+
+        else:
+            self.anim_mode = "stay"
+            self.animation_choice()
+
+
+        # for event in p.event.get():
+        #     if event.type == p.KEYDOWN:
+        #         if event.key == p.K_a or event.key == p.K_d:
+        #             self.anim_mode = "move"
+        #
+        #             if event.key == p.K_a:
+        #                 if 0 <= self.rect.bottomleft[0] <= SCREEN_WIDTH:
+        #                      = "a"
+        #                     self.animation_choice()
+        #                     self.rect[0] -= 10
+        #
+        #             if event.key == p.K_d:
+        #                 if 0 <= self.rect.bottomright[0] <= SCREEN_WIDTH:
+        #                      = "d"
+        #                     self.animation_choice()
+        #                     self.rect[0] += 10
+        #
+        #         if event.key == p.K_LCTRL:
+        #             self.anim_mode = "super"
+        #
+        #             if event.key == p.K_LCTRL:
+        #                  = "lctrl"
+        #                 self.animation_choice()
+        #
+        #     if event.type == p.KEYUP:
+        #         if event.key == p.L_CTRL: #возможно добавление новых клавиш управления
+        #             self.anim_mode = "super"
+        #
+        #             if event.key == p.K_LCTRL:
+        #                  = None
+        #                 self.animation_choice()
+        #
+        #     if event.type != p.KEYDOWN and event.type != p.KEYUP:
+        #         self.anim_mode = "stay"
+        #          = None
+        #         self.animation_choice()
 
     def load_animations(self):
-        self.idle_anim_right = []
-        for i in range(1, 4):
-            self.idle_anim_right.append(load_image(f"images/fire_wizard/idle{i}.png", PERS_WDT, PERS_HGT))
+        idle_animations = {
+            "stay_right": [load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 4)],
 
-        self.idle_anim_left = []
-        for image in self.idle_anim_right:
-            self.idle_anim_left.append(p.transform.flip(image, True, False)) #true - вертикаль, false - горизонталь
+            "stay_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 4)], # true - вертикаль, false - горизонталь
+
+            "moves_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
+
+            "moves_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)], # true - вертикаль, false - горизонталь
+
+            "super_right": [
+                                      load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
+                                      load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT)
+                           ],
+
+            "super_left": [
+                                     p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False),
+                                     p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT), True, False)
+                          ]
+        }
+
+        return idle_animations
 
     def update(self):
-        if p.time.get_ticks() - self.time >= self.interval:
-            self.current_image += 1
-            if self.current_image >= len(self.animations):
-                self.current_image = 0
+        self.movement_checker()
+
+    def animation_choice(self):
+        if self.anim_mode == "stay":
+            self.time = p.time.get_ticks()
+
+            if p.time.get_ticks() - self.time >= self.interval:
+                self.image_num += 1
+                if self.image_num >= len(self.animations[self.anim_type]):
+                    self.image_num = 0
                 self.time = p.time.get_ticks()
+
+                self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "move":
+
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+
+            self.time = p.time.get_ticks()
+
+            if p.time.get_ticks() - self.time >= self.interval:
+                self.image_num += 1
+                if self.image_num >= len(self.animations[self.anim_type]):
+                    self.image_num = 0
+
+                self.time = p.time.get_ticks()
+
+                self.image = self.animations[self.anim_type][self.image_num]
+
+            # if  == "d":
+            #     self.side = "right"
+            #     self.anim_type = f"{self.anim_mode}_{self.side}"
+            #
+            #     self.time = p.time.get_ticks()
+            #
+            #     if p.time.get_ticks() - self.time >= self.interval:
+            #         self.image_num += 1
+            #         if self.image_num >= len(self.animations[self.anim_type]):
+            #             self.image_num = 0
+            #         self.update()
+            #         self.time = p.time.get_ticks()
+            #
+            #         self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "super":
+                self.image_num = 1 #индекс сидячего положения в моде super списка super_right/left словаря animations
+                self.anim_type = f"{self.anim_mode}_{self.side}"
+
+                self.image = self.animations[self.anim_type][self.image_num]
+
+            # В дальнейшем добавить передвижение в сидячем состоянии ->
+            #
+            # keys = p.key.get_pressed()
+            # for key in keys:
+            #     if key[K_LCTRL]:
+            #         self.image_num = 0
+            #         self.update()
 
 class Game:
     def __init__(self):
@@ -88,7 +217,8 @@ class Game:
     def draw(self):
         # Отрисовка интерфейса
         self.screen.blit(self.background, (0, 0))
-        self.screen.blit(self.player.animations[self.player.current_image], self.player.rect)
+        #self.player.anim_mode = True
+        self.screen.blit(self.player.image, self.player.rect)
         p.display.flip()
 
 
