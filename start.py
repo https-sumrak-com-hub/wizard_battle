@@ -53,16 +53,34 @@ class Player(p.sprite.Sprite):
                     self.side = "left"
                     self.animation_choice()
                     self.rect[0] -= 10
+                else:
+                    self.image_num = 0
+                    self.anim_mode = "stay"
+                    self.animation_choice()
 
             if key[p.K_d]:
                 if 0 <= self.rect.bottomright[0] <= SCREEN_WIDTH:
                     self.side = "right"
                     self.animation_choice()
                     self.rect[0] += 10
+                else:
+                    self.image_num = 0
+                    self.anim_mode = "stay"
+                    self.animation_choice()
 
-        else:
+        elif key[K_LCTRL]:
+            self.anim_mode = "super"
+            self.animation_choice()
+
+        elif self.anim_mode == "stay" and key[p.K_a] == False and key[p.K_d] == False:
             self.anim_mode = "stay"
             self.animation_choice()
+
+        else:
+            self.image_num = 0
+            self.anim_mode = "stay"
+            self.animation_choice()
+
 
 
         # for event in p.event.get():
@@ -130,30 +148,30 @@ class Player(p.sprite.Sprite):
 
     def animation_choice(self):
         if self.anim_mode == "stay":
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+
             current_time = p.time.get_ticks()
 
             if current_time - self.time >= self.interval:
                 self.image_num += 1
-                if self.image_num >= len(self.animations[self.anim_type]):
+                if self.image_num == len(self.animations[self.anim_type]):
                     self.image_num = 0
                 self.time = current_time
 
-                self.image = self.animations[self.anim_type][self.image_num]
+            self.image = self.animations[self.anim_type][self.image_num]
 
         if self.anim_mode == "move":
-
             self.anim_type = f"{self.anim_mode}_{self.side}"
 
-            self.time = p.time.get_ticks()
+            current_time = p.time.get_ticks()
 
-            if p.time.get_ticks() - self.time >= self.interval:
+            if current_time - self.time >= self.interval:
                 self.image_num += 1
-                if self.image_num >= len(self.animations[self.anim_type]):
+                if self.image_num == len(self.animations[self.anim_type]):
                     self.image_num = 0
+                self.time = current_time
 
-                self.time = p.time.get_ticks()
-
-                self.image = self.animations[self.anim_type][self.image_num]
+            self.image = self.animations[self.anim_type][self.image_num]
 
             # if  == "d":
             #     self.side = "right"
@@ -171,10 +189,11 @@ class Player(p.sprite.Sprite):
             #         self.image = self.animations[self.anim_type][self.image_num]
 
         if self.anim_mode == "super":
-                self.image_num = 1 #индекс сидячего положения в моде super списка super_right/left словаря animations
-                self.anim_type = f"{self.anim_mode}_{self.side}"
+            self.anim_type = f"{self.anim_mode}_{self.side}"
 
-                self.image = self.animations[self.anim_type][self.image_num]
+            self.image_num = 1 #индекс сидячего положения в моде super списка super_right/left словаря animations
+
+            self.image = self.animations[self.anim_type][self.image_num]
 
             # В дальнейшем добавить передвижение в сидячем состоянии ->
             #
