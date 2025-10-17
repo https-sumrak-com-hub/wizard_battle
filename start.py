@@ -40,7 +40,7 @@ class Player(p.sprite.Sprite):
         self.image = self.animations[self.anim_type][self.image_num]
         self.rect = self.image.get_rect()
         self.rect.center = (100, SCREEN_HEIGHT // 2)
-        self.time = 100
+        self.time = p.time.get_ticks()
         self.interval = 480
 
     def movement_checker(self):
@@ -108,9 +108,9 @@ class Player(p.sprite.Sprite):
 
             "stay_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 4)], # true - вертикаль, false - горизонталь
 
-            "moves_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
+            "move_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
 
-            "moves_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)], # true - вертикаль, false - горизонталь
+            "move_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)], # true - вертикаль, false - горизонталь
 
             "super_right": [
                                       load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
@@ -130,13 +130,13 @@ class Player(p.sprite.Sprite):
 
     def animation_choice(self):
         if self.anim_mode == "stay":
-            self.time = p.time.get_ticks()
+            current_time = p.time.get_ticks()
 
-            if p.time.get_ticks() - self.time >= self.interval:
+            if current_time - self.time >= self.interval:
                 self.image_num += 1
                 if self.image_num >= len(self.animations[self.anim_type]):
                     self.image_num = 0
-                self.time = p.time.get_ticks()
+                self.time = current_time
 
                 self.image = self.animations[self.anim_type][self.image_num]
 
