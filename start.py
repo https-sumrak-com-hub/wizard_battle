@@ -51,35 +51,30 @@ class Player(p.sprite.Sprite):
             if key[p.K_a]:
                 if 0 <= self.rect.bottomleft[0] <= SCREEN_WIDTH:
                     self.side = "left"
-                    self.animation_choice()
                     self.rect[0] -= 10
                 else:
                     self.image_num = 0
                     self.anim_mode = "stay"
-                    self.animation_choice()
 
             if key[p.K_d]:
                 if 0 <= self.rect.bottomright[0] <= SCREEN_WIDTH:
                     self.side = "right"
-                    self.animation_choice()
                     self.rect[0] += 10
                 else:
                     self.image_num = 0
                     self.anim_mode = "stay"
-                    self.animation_choice()
 
         elif key[K_LCTRL]:
             self.anim_mode = "super"
-            self.animation_choice()
 
         elif self.anim_mode == "stay" and key[p.K_a] == False and key[p.K_d] == False:
             self.anim_mode = "stay"
-            self.animation_choice()
 
         else:
             self.image_num = 0
             self.anim_mode = "stay"
-            self.animation_choice()
+
+        self.animation_choice()
 
 
 
