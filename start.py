@@ -27,6 +27,11 @@ def text_render(text):
 class Player(p.sprite.Sprite):
     def __init__(self):
         super().__init__()
+        self.key = None
+
+        self.charge = False
+        self.charge_power = 10
+        self.image_charge_line = (p.Surface((self.charge_power, 10))).fill("red")
 
         self.anim_mode = "stay"
         self.side = "right"
@@ -43,12 +48,31 @@ class Player(p.sprite.Sprite):
         self.time = p.time.get_ticks()
         self.interval = 480
 
+    def charging(self):
+        charge_image = load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT)
+
+        if self.key[K_SPACE]:
+            self.charge = True
+
+            if self.side == "left":
+                self.image = p.image.transform.flip(charge_image, True, False)
+            elif self.side == "right":
+                self.image = charge_image
+
+
+
+
+
+        self.animation_choice()
+
+
+
+
     def movement_checker(self):
-        key = p.key.get_pressed()
-        if key[p.K_a] or key[p.K_d]:
+        if self.key[p.K_a] or self.key[p.K_d]:
             self.anim_mode = "move"
 
-            if key[p.K_a]:
+            if self.key[p.K_a]:
                 if 0 <= self.rect.bottomleft[0] <= SCREEN_WIDTH:
                     self.side = "left"
                     self.rect[0] -= 10
@@ -56,7 +80,7 @@ class Player(p.sprite.Sprite):
                     self.image_num = 0
                     self.anim_mode = "stay"
 
-            if key[p.K_d]:
+            if self.key[p.K_d]:
                 if 0 <= self.rect.bottomright[0] <= SCREEN_WIDTH:
                     self.side = "right"
                     self.rect[0] += 10
@@ -64,10 +88,10 @@ class Player(p.sprite.Sprite):
                     self.image_num = 0
                     self.anim_mode = "stay"
 
-        elif key[K_LCTRL]:
+        elif self.key[K_LCTRL]:
             self.anim_mode = "super"
 
-        elif self.anim_mode == "stay" and key[p.K_a] == False and key[p.K_d] == False:
+        elif self.anim_mode == "stay" and self.key[p.K_a] == False and self.key[p.K_d] == False:
             self.anim_mode = "stay"
 
         else:
@@ -139,6 +163,7 @@ class Player(p.sprite.Sprite):
         return idle_animations
 
     def update(self):
+        self.key = p.key.get_pressed()
         self.movement_checker()
 
     def animation_choice(self):
@@ -233,6 +258,10 @@ class Game:
         self.screen.blit(self.background, (0, 0))
         #self.player.anim_mode = True
         self.screen.blit(self.player.image, self.player.rect)
+
+        if self.player.charge:
+            self.screen.blit(self.player.image_charge_line, self.player.rect_charge_line)
+
         p.display.flip()
 
 
