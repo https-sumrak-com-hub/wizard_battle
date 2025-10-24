@@ -29,10 +29,6 @@ class Player(p.sprite.Sprite):
         super().__init__()
         self.key = None
 
-        self.charge = False
-        self.charge_power = 10
-        self.image_charge_line = (p.Surface((self.charge_power, 10))).fill("red")
-
         self.anim_mode = "stay"
         self.side = "right"
         self.anim_type = f"{self.anim_mode}_{self.side}"
@@ -48,25 +44,19 @@ class Player(p.sprite.Sprite):
         self.time = p.time.get_ticks()
         self.interval = 480
 
+        self.charge_mode = False
+        self.charge_power = 1
+        self.image_charge_line = p.Surface((self.charge_power, 10))
+        self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT/3, self.rect.topleft[1] + PERS_HGT/10)
+        self.charge_image = [load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False)]
+
     def charging(self):
-        charge_image = load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT)
-
         if self.key[K_SPACE]:
-            self.charge = True
-
-            if self.side == "left":
-                self.image = p.image.transform.flip(charge_image, True, False)
-            elif self.side == "right":
-                self.image = charge_image
-
-
-
-
+            self.charge_mode = True
+        else:
+            self.charge_mode = False
 
         self.animation_choice()
-
-
-
 
     def movement_checker(self):
         if self.key[p.K_a] or self.key[p.K_d]:
@@ -164,7 +154,9 @@ class Player(p.sprite.Sprite):
 
     def update(self):
         self.key = p.key.get_pressed()
+        self.charging()
         self.movement_checker()
+
 
     def animation_choice(self):
         if self.anim_mode == "stay":
@@ -223,6 +215,23 @@ class Player(p.sprite.Sprite):
             #         self.image_num = 0
             #         self.update()
 
+        if self.charge_mode:
+            if self.charge_power >= 100:
+                self.charge_mode += 0
+                
+            else:
+                self.charge_power += 1
+
+            if self.side == "right":
+                self.image = self.charge_image[0]
+            else:
+                self.image = self.charge_image[1]
+
+            self.image_charge_line = p.Surface((self.charge_power, 10))
+            self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
+            self.image_charge_line.fill("red")
+
+
 class Game:
     def __init__(self):
 
@@ -259,7 +268,7 @@ class Game:
         #self.player.anim_mode = True
         self.screen.blit(self.player.image, self.player.rect)
 
-        if self.player.charge:
+        if self.player.charge_mode:
             self.screen.blit(self.player.image_charge_line, self.player.rect_charge_line)
 
         p.display.flip()
