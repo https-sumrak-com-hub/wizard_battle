@@ -23,9 +23,38 @@ def load_image(file, width, height):
 def text_render(text):
     return font.render(str(text), True, "black")
 
+class Fireball:
+    def __init__(self, coord, side, charge_power, wizard_type, screen):
+        self.screen = screen
+
+        self.player_coords = coord
+        self.side = side
+        self.power = charge_power
+        self.fireball_image = load_image(f"images/{wizard_type}_wizard/{wizard_type}_ball.png", PERS_WDT, PERS_HGT)
+        self.fireball_rect = self.fireball_image.get_rect()
+
+
+    def move(self):
+        pass
+
+    def update(self):
+        self.draw()
+
+    def draw(self):
+        if self.power == 100:
+            # if self.side == "right":
+            #     self.fireball_rect.center = (self.player_coords[0] + PERS_WDT, self.player_coords[1] - PERS_HGT/2)
+            # else:
+            #     self.fireball_rect.center = (self.player_coords[0], self.player_coords[1] - PERS_HGT / 2)
+
+            self.screen.blit(self.fireball_image, self.fireball_rect.center)
+
+
+
+
 
 class Player(p.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, screen):
         super().__init__()
         self.key = None
 
@@ -33,7 +62,7 @@ class Player(p.sprite.Sprite):
         self.side = "right"
         self.anim_type = f"{self.anim_mode}_{self.side}"
 
-        self.wizard_type = "fire"  #may be lightning
+        self.wizard_type = "fire"  #may be lightning and afro
         
         self.animations = self.load_animations()
 
@@ -49,6 +78,8 @@ class Player(p.sprite.Sprite):
         self.image_charge_line = p.Surface((self.charge_power, 10))
         self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT/3, self.rect.topleft[1] + PERS_HGT/10)
         self.charge_image = [load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False)]
+        self.fireball = Fireball(self.rect.topleft, self.side, self.charge_power, self.wizard_type, screen)
+        Fireball.__init__(self, self.rect.topleft, self.side, self.charge_power, self.wizard_type, screen)
 
     def charging(self):
         if self.key[K_SPACE]:
@@ -155,6 +186,7 @@ class Player(p.sprite.Sprite):
     def update(self):
         self.key = p.key.get_pressed()
         self.charging()
+        self.fireball.update()
         self.movement_checker()
 
 
@@ -217,8 +249,8 @@ class Player(p.sprite.Sprite):
 
         if self.charge_mode:
             if self.charge_power >= 100:
-                self.charge_mode += 0
-                
+                self.charge_mode = False
+                self.charge_power = 0
             else:
                 self.charge_power += 1
 
@@ -231,7 +263,6 @@ class Player(p.sprite.Sprite):
             self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
             self.image_charge_line.fill("red")
 
-
 class Game:
     def __init__(self):
 
@@ -243,7 +274,7 @@ class Game:
 
         self.background = load_image("images/background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        self.player = Player()
+        self.player = Player(self.screen)
         self.clock = p.time.Clock()
         self.run()
 
