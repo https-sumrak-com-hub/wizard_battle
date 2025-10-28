@@ -41,14 +41,13 @@ class Fireball:
         self.draw()
 
     def draw(self):
-        if self.power >= 100:
-            if self.side == "right":
-                self.fireball_image = p.transform.flip(self.fireball_image, True, False)
-                self.fireball_rect = (self.player_coords[0] + PERS_WDT, self.player_coords[1] - PERS_HGT/2)
-            else:
-                self.fireball_rect = (self.player_coords[0], self.player_coords[1] - PERS_HGT / 2)
+        if self.power == 100:
+            # if self.side == "right":
+            #     self.fireball_rect.center = (self.player_coords[0] + PERS_WDT, self.player_coords[1] - PERS_HGT/2)
+            # else:
+            #     self.fireball_rect.center = (self.player_coords[0], self.player_coords[1] - PERS_HGT / 2)
 
-            self.screen.blit(self.fireball_image, self.fireball_rect)
+            self.screen.blit(self.fireball_image, self.fireball_rect.center)
 
 
 
@@ -57,7 +56,7 @@ class Fireball:
 class Player(p.sprite.Sprite):
     def __init__(self, screen):
         super().__init__()
-        self.screen = screen
+        self.key = None
 
         self.anim_mode = "stay"
         self.side = "right"
@@ -186,10 +185,6 @@ class Player(p.sprite.Sprite):
 
     def update(self):
         self.key = p.key.get_pressed()
-
-        self.fireball.fireball_rect = self.rect.topleft
-        self.fireball.side = self.side
-
         self.charging()
         self.fireball.update()
         self.movement_checker()
@@ -255,8 +250,6 @@ class Player(p.sprite.Sprite):
         if self.charge_mode:
             if self.charge_power >= 100:
                 self.charge_mode = False
-                self.fireball.power = self.charge_power
-
                 self.charge_power = 0
             else:
                 self.charge_power += 10
@@ -269,7 +262,6 @@ class Player(p.sprite.Sprite):
             self.image_charge_line = p.Surface((self.charge_power, 10))
             self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
             self.image_charge_line.fill("red")
-
 
 class Game:
     def __init__(self):
