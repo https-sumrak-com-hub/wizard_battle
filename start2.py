@@ -1,19 +1,28 @@
 import random
-
+import screeninfo
 import pygame as p
-from pygame.constants import K_DOWN, K_LCTRL, K_SPACE #хороший импорт, но и без него работает
+from pygame.constants import K_RCTRL, K_LCTRL, K_RALT, K_LALT
+
+from start import SCREEN_WIDTH
 
 p.init()
 
-SCREEN_WIDTH = 900
-SCREEN_HEIGHT = 550
+monitors = screeninfo.get_monitors()
+
+SCREEN_WIDTH = monitors[0].width
+SCREEN_HEIGHT = monitors[0].height
+
 
 PERS_WDT = 300
 PERS_HGT = 375
 
-FPS = 24
+BUTTON_WIDTH = SCREEN_WIDTH/3
+BUTTON_HEIGHT = SCREEN_WIDTH/20
+
+FPS = 120
 
 font = p.font.Font(None, 40)
+BIGfont = p.font.Font(None, 100)
 
 
 def load_image(file, width, height):
@@ -25,39 +34,41 @@ def text_render(text):
     return font.render(str(text), True, "black")
 
 class Fireball:
-    def __init__(self, coord, side, charge_power, wizard_type, screen):
+    def __init__(self, coord, side, charge_power, way, screen):
         self.screen = screen
         self.side = side
         self.power = charge_power
-        self.speed = 8 + self.power // 10  # чем больше заряд, тем быстрее летит
-        self.fireball_image = load_image(
-            f"images/{wizard_type}_wizard/{wizard_type}_ball.png",
-            PERS_WDT / 3,
-            PERS_HGT / 3
-        )
+        self.speed = 2 + self.power // 10  # чем больше заряд, тем быстрее летит
+        self.fireball_images = {
+            "l": load_image(f"{way}/ball.png", PERS_WDT / 3, PERS_HGT / 3)
+        ,
+            "r":  p.transform.flip(load_image(f"{way}/ball.png", PERS_WDT / 3, PERS_HGT / 3), True, False)
+
+        }
+        self.fireball_image = self.fireball_images[self.side]
         self.fireball_rect = self.fireball_image.get_rect()
 
         # позиция появления
-        if self.side == "right":
+        if self.side == "r":
             self.fireball_rect.center = (
                 coord[0] + PERS_WDT - PERS_WDT // 4,
                 coord[1] + PERS_HGT // 3
             )
         else:
+
             self.fireball_rect.center = (
                 coord[0] + PERS_WDT // 4,
                 coord[1] + PERS_HGT // 3
             )
+        self.fireball_image = self.fireball_images[self.side]
 
     def move(self):
-        """Двигаем фаербол в сторону выстрела."""
-        if self.side == "right":
+        if self.side == "r":
             self.fireball_rect.x += self.speed
         else:
             self.fireball_rect.x -= self.speed
 
     def update(self):
-        """Обновление — движение и отрисовка."""
         self.move()
         self.draw()
 
@@ -65,287 +76,190 @@ class Fireball:
         self.screen.blit(self.fireball_image, self.fireball_rect)
 
     def offscreen(self):
-        """Проверяем, не улетел ли за экран."""
         return self.fireball_rect.right < 0 or self.fireball_rect.left > SCREEN_WIDTH
 
-
-class Player(p.sprite.Sprite):
-    def __init__(self, screen):
-        super().__init__()
+class Personage(p.sprite.Sprite):
+    def __init__(self, screen, player_number):
         self.screen = screen
-        self.key = None
+        self.p_num = str(player_number)
+        self.key = p.key.get_pressed()
+        self.keys = {
+            "1":[
+                p.K_a, p.K_d, K_LCTRL, K_LALT
+            ],
+            "2":[
+                p.K_LEFT, p.K_RIGHT, K_RCTRL, K_RALT
+            ]
+        }
 
-        self.anim_mode = "stay"
-        self.side = "right"
-        self.anim_type = f"{self.anim_mode}_{self.side}"
+        self.timer = p.time.get_ticks() + 600 #now time in milliseconds plus interval (for stay, walk and fireball delay attack) value
 
-        self.wizard_type = "fire"
+        with open("images/personages", "r") as file:
+            self.wiz = (file.read()).split("\n")
 
-        self.animations = self.load_animations()
+        self.wiz = random.choice(self.wiz)
 
-        self.image_num = 0
-        self.image = self.animations[self.anim_type][self.image_num]
-        self.rect = self.image.get_rect()
-        self.rect.center = (100, SCREEN_HEIGHT // 2)
-        self.time = p.time.get_ticks()
-        self.interval = 480
+        self.way = f"images/{self.wiz}"
 
-        # Заряд
+        self.anims = self.animations_storage()
+
+        if self.p_num == "1":
+            self.side = "r"
+        else:
+            self.side = "l"
+
+        self.move_type = "stay"
+        self.img_mode = f"{self.move_type}_{self.side}"
+        self.img_num = 0
+        self.img = self.anims[self.img_mode][self.img_num]
+        self.rect = self.img.get_rect()
+        self.rect.center = (100, SCREEN_HEIGHT // 2) if self.p_num == "1" else (SCREEN_WIDTH - 100, SCREEN_HEIGHT // 2)
+
         self.charge_mode = False
         self.charge_power = 1
         self.image_charge_line = p.Surface((self.charge_power, 10))
         self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 10)
-        self.charge_image = [
-            load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
-            p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False)
-        ]
 
-        # Список активных фаерболов
         self.fireballs = []
-
-    def charging(self):
-        """Режим зарядки — удержание пробела."""
-        " Добавить таймер для выстрела "
-        if self.key[K_SPACE] and p.time.get_ticks() - self.time > 23:
-            self.charge_mode = True
-        else:
-
-            # если отпустил пробел после зарядки
-            if self.charge_mode and self.charge_power > 1:
-                new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.wizard_type, self.screen)
-                self.fireballs.append(new_ball)
-
-            self.charge_mode = False
-            self.charge_power = 1
-
-        self.animation_choice()
-
-    def movement_checker(self):
-        if self.key[p.K_a] or self.key[p.K_d]:
-            self.anim_mode = "move"
-
-            if self.key[p.K_a]:
-                if self.rect.left > 0:
-                    self.side = "left"
-                    self.rect.x -= 10
-
-            if self.key[p.K_d]:
-                if self.rect.right < SCREEN_WIDTH:
-                    self.side = "right"
-                    self.rect.x += 10
-
-        elif self.key[K_LCTRL]:
-            self.anim_mode = "super"
-
-        else:
-            self.anim_mode = "stay"
-
-        self.animation_choice()
-
-    def load_animations(self):
-        idle_animations = {
-            "stay_right": [load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 4)],
-            "stay_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 4)],
-            "move_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
-            "move_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)],
-            "super_right": [
-                load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
-                load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT)
-            ],
-            "super_left": [
-                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False),
-                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT), True, False)
-            ]
-        }
-        return idle_animations
 
     def update(self):
         self.key = p.key.get_pressed()
         self.charging()
-        self.movement_checker()
+        self.move()
 
-        # обновляем фаерболы
+        #go to update fireballs
         for fireball in self.fireballs:
             fireball.update()
 
-        # удаляем те, что улетели
+        #delete fireballs outside
         self.fireballs = [f for f in self.fireballs if not f.offscreen()]
 
-    def animation_choice(self):
-        current_time = p.time.get_ticks()
+    def new_img(self): #изменяет текущий номер изображения персонажа (при стоячем и ходячим положениях)
+        curr_timer = p.time.get_ticks()
+        if self.img_num < len(self.anims[self.img_mode]) - 1:
+            if curr_timer > self.timer:
+                self.img_num += 1
+                self.timer = curr_timer + 600
+        elif self.img_num >= len(self.anims[self.img_mode]) - 1:
+            self.img_num = 0
+            self.timer = curr_timer + 600
+        self.img = self.anims[self.img_mode][self.img_num]
 
-        if self.anim_mode in ["stay", "move"]:
-            self.anim_type = f"{self.anim_mode}_{self.side}"
-
-            if self.image_num == len(self.animations[self.anim_type]):
-                self.image_num = 0
-
-            if current_time - self.time >= self.interval:
-                self.image_num = (self.image_num + 1) % len(self.animations[self.anim_type])
-                self.time = current_time
-
-            self.image = self.animations[self.anim_type][self.image_num]
-
-        if self.anim_mode == "super":
-            self.anim_type = f"{self.anim_mode}_{self.side}"
-            self.image_num = 1
-            self.image = self.animations[self.anim_type][self.image_num]
-
-        # Зарядка
-        if self.charge_mode:
-            self.charge_power = min(self.charge_power + 2, 100)
-            self.image = self.charge_image[0] if self.side == "right" else self.charge_image[1]
-            self.image_charge_line = p.Surface((self.charge_power, 10))
+    def charging(self):
+        curr_timer = p.time.get_ticks()
+        if self.key[self.keys[self.p_num][3]] and curr_timer > self.timer and self.move_type == "super" and self.img_num == 1: #упростить условие
+            self.charge_mode = True
+            self.charge_power = min(self.charge_power + 0.6, 100)
+            self.image_charge_line = p.Surface((self.charge_power, 7))
             self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
             self.image_charge_line.fill("red")
 
+        else:
 
-class Enemy(p.sprite.Sprite):
-    def __init__(self, screen):
-        super().__init__()
-        self.screen = screen
+            # если отпустил пробел после зарядки
+            if self.charge_mode and 1 <= self.charge_power <= 100:
+                new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.way, self.screen)
+                self.fireballs.append(new_ball)
+                self.timer = curr_timer + 600
+            self.charge_mode = False
+            self.charge_power = 1
 
-        self.anim_mode = "stay"
-        self.side = "left"
-        self.anim_type = f"{self.anim_mode}_{self.side}"
+    def move(self):
+        if self.key[self.keys[self.p_num][0]] or self.key[self.keys[self.p_num][1]]:
+            self.move_type = "move"
 
-        self.wizard_type = random.choice(["afro", "lightning"]) #may be lightning and afro
+            if self.key[self.keys[self.p_num][0]]:
+                self.side = "l"
+                self.img_mode = f"{self.move_type}_{self.side}"
+                self.new_img()
+                if self.rect.left > 0:
+                    self.rect.x -= 2.3
 
-        self.animations = self.load_animations()
+                else:
+                    self.move_type = "stay"
+                    self.img_num = 0
+                    self.img_mode = f"{self.move_type}_{self.side}"
+                    self.new_img()
 
-        self.image_num = 0
-        self.image = self.animations[self.anim_type][self.image_num]
-        self.rect = self.image.get_rect()
-        self.rect.center = (SCREEN_WIDTH - 100, SCREEN_HEIGHT // 2)
-        self.time = p.time.get_ticks()
-        self.interval = 480
+            if self.key[self.keys[self.p_num][1]]:
+                self.side = "r"
+                self.img_mode = f"{self.move_type}_{self.side}"
+                self.new_img()
+                if self.rect.right < SCREEN_WIDTH:
+                    self.rect.x += 2.3
 
-        # Заряд
-        # self.charge_mode = False
-        # self.charge_power = 1
-        # self.image_charge_line = p.Surface((self.charge_power, 10))
-        # self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 10)
-        # self.charge_image = [
-        #     load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
-        #     p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False)
-        # ]
+                else:
+                    self.move_type = "stay"
+                    self.img_num = 0
+                    self.img_mode = f"{self.move_type}_{self.side}"
+                    self.new_img()
 
-        # Список активных фаерболов
-        # self.fireballs = []
-    def load_animations(self):
-        idle_animations = {
-            "stay_right": [load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 4)],
-            "stay_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 4)],
-            "move_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
-            "move_left": [p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)],
-            "super_right": [
-                load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
-                load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT)
+        elif self.key[self.keys[self.p_num][2]]:
+            self.move_type = "super"
+            self.img_num = 2 #sit image number in animations_storage
+            self.img_mode = f"{self.move_type}_{self.side}"
+            self.img = self.anims[self.img_mode][self.img_num]
+
+        elif self.key[self.keys[self.p_num][3]]:
+            self.move_type = "super"
+            self.img_num = 1 #charging image number in animations_storage
+            self.img_mode = f"{self.move_type}_{self.side}"
+            self.img = self.anims[self.img_mode][self.img_num]
+
+        else:
+            self.move_type = "stay"
+            self.img_mode = f"{self.move_type}_{self.side}"
+            self.new_img()
+
+    def animations_storage(self):
+        animation_images = {
+            "stay_r":[
+                load_image(f"{self.way}/stay{i}.png", PERS_WDT, PERS_HGT) for i in range(3)
             ],
-            "super_left": [
-                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False),
-                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT), True, False)
+            "stay_l":[
+                p.transform.flip(load_image(f"{self.way}/stay{i}.png", PERS_WDT, PERS_HGT) , True, False) for i in range(3)
+            ],
+            "move_r":[
+                load_image(f"{self.way}/move{i}.png", PERS_WDT, PERS_HGT) for i in range(4)
+            ],
+            "move_l":[
+                p.transform.flip(load_image(f"{self.way}/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(4)
+            ],
+            "super_r":[
+                load_image(f"{self.way}/attack.png", PERS_WDT, PERS_HGT),
+                load_image(f"{self.way}/charge.png", PERS_WDT, PERS_HGT),
+                load_image(f"{self.way}/sit.png", PERS_WDT, PERS_HGT)
+            ],
+            "super_l":[
+                p.transform.flip(load_image(f"{self.way}/attack.png", PERS_WDT, PERS_HGT), True, False),
+                p.transform.flip(load_image(f"{self.way}/charge.png", PERS_WDT, PERS_HGT), True, False),
+                p.transform.flip(load_image(f"{self.way}/sit.png", PERS_WDT, PERS_HGT), True, False)
             ]
         }
-        return idle_animations
 
-    # def charging(self):
-    #     """Режим зарядки — удержание пробела."""
-    #     " Добавить таймер для выстрела "
-    #     if self.key[K_SPACE] and p.time.get_ticks() - self.time > 23:
-    #         self.charge_mode = True
-    #     else:
-    #
-    #         # если отпустил пробел после зарядки
-    #         if self.charge_mode and self.charge_power > 1:
-    #             new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.wizard_type, self.screen)
-    #             self.fireballs.append(new_ball)
-    #
-    #         self.charge_mode = False
-    #         self.charge_power = 1
-    #
-    #     self.animation_choice()
+        return animation_images
 
-    # def movement_checker(self):
-    #     if self.key[p.K_a] or self.key[p.K_d]:
-    #         self.anim_mode = "move"
-    #
-    #         if self.key[p.K_a]:
-    #             if self.rect.left > 0:
-    #                 self.side = "left"
-    #                 self.rect.x -= 10
-    #
-    #         if self.key[p.K_d]:
-    #             if self.rect.right < SCREEN_WIDTH:
-    #                 self.side = "right"
-    #                 self.rect.x += 10
-    #
-    #     elif self.key[K_LCTRL]:
-    #         self.anim_mode = "super"
-    #
-    #     else:
-    #         self.anim_mode = "stay"
-    #
-    #     self.animation_choice()
-
-
-
-    def update(self):
-        pass
-        #self.key = p.key.get_pressed()
-        # self.charging()
-        # self.movement_checker()
-        #
-        # # обновляем фаерболы
-        # for fireball in self.fireballs:
-        #     fireball.update()
-        #
-        # # удаляем те, что улетели
-        # self.fireballs = [f for f in self.fireballs if not f.offscreen()]
-
-    def animation_choice(self):
-        current_time = p.time.get_ticks()
-
-        if self.anim_mode in ["stay", "move"]:
-            self.anim_type = f"{self.anim_mode}_{self.side}"
-
-            if self.image_num == len(self.animations[self.anim_type]):
-                self.image_num = 0
-
-            if current_time - self.time >= self.interval:
-                self.image_num = (self.image_num + 1) % len(self.animations[self.anim_type])
-                self.time = current_time
-
-            self.image = self.animations[self.anim_type][self.image_num]
-
-        if self.anim_mode == "super":
-            self.anim_type = f"{self.anim_mode}_{self.side}"
-            self.image_num = 1
-            self.image = self.animations[self.anim_type][self.image_num]
-
-        # Зарядка
-        # if self.charge_mode:
-        #     self.charge_power = min(self.charge_power + 2, 100)
-        #     self.image = self.charge_image[0] if self.side == "right" else self.charge_image[1]
-        #     self.image_charge_line = p.Surface((self.charge_power, 10))
-        #     self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
-        #     self.image_charge_line.fill("red")
-
-
-# ==========================================================
-#                         GAME CLASS
-# ==========================================================
 class Game:
-    def __init__(self):
+    def __init__(self, mode):
         self.screen = p.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        p.display.set_caption("Wizard Battle")
+        p.display.set_caption("BATTLE")
         p.display.set_icon(load_image("images/icon.png", 10, 10))
+        self.mode = mode
 
-        self.background = load_image("images/background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
-        self.player = Player(self.screen)
-        self.enemy = Enemy(self.screen)
+        self.locations = [
+            load_image(f"images/location{i}.png", SCREEN_WIDTH, SCREEN_HEIGHT) for i in range(3)
+        ]
+
+        self.background = random.choice(self.locations)
+        self.player1 = Personage(self.screen, 1)
+        self.player2 = Personage(self.screen, 2)
+
         self.clock = p.time.Clock()
-        self.run()
+        if self.mode == "game":
+            self.run()
+
+        else:
+            MainMenu()
 
     def run(self):
         while True:
@@ -356,26 +270,215 @@ class Game:
 
     def event(self):
         for event in p.event.get():
-            if event.type == p.QUIT:
-                quit()
+            if event.type == p.KEYDOWN:
+                if event.key == p.K_ESCAPE:
+                    self.mode = "menu"
+                    MainMenu()
 
     def update(self):
-        self.player.update()
+        #go to update current players
+        self.player1.update()
+        self.player2.update()
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
-        self.screen.blit(self.player.image, self.player.rect)
-        self.screen.blit(self.enemy.image, self.enemy.rect)
 
-        if self.player.charge_mode:
-            self.screen.blit(self.player.image_charge_line, self.player.rect_charge_line)
+        # blit current players
+        self.screen.blit(self.player1.img, self.player1.rect)
+        self.screen.blit(self.player2.img, self.player2.rect)
 
-        # отрисовка фаерболов
-        for fireball in self.player.fireballs:
+        if self.player1.charge_mode:
+           self.screen.blit(self.player1.image_charge_line, self.player1.rect_charge_line)
+
+        if self.player2.charge_mode:
+            self.screen.blit(self.player2.image_charge_line, self.player2.rect_charge_line)
+
+        #blit current fireballs
+        for fireball in self.player1.fireballs:
+            fireball.draw()
+
+        for fireball in self.player2.fireballs:
             fireball.draw()
 
         p.display.flip()
 
+class Button:
+    def __init__(self, text, x, y, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=None, button="wall", button_clicked="wall_negative"):
+        self.func = func
 
-if __name__ == "__main__":
-    Game()
+        try:
+            self.idle_image = load_image(f"images/{button}.png", width, height)
+            self.pressed_image = load_image(f"images/{button_clicked}.png", width, height)
+        except:
+            self.idle_image = button
+            self.pressed_image = button_clicked
+
+        self.image = self.idle_image
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+
+        self.text_font = text_font
+        self.text = {
+            "unclicked": self.text_font.render(str(text), True, "white"),
+            "clicked": self.text_font.render(str(text), True, "black")
+        }
+        self.text_mode = "unclicked"
+        self.text_rect = self.text[self.text_mode].get_rect()
+        self.text_rect.center = self.rect.center
+
+        self.is_pressed = False
+
+    def update(self):
+        self.is_touched()
+
+    def is_touched(self):
+        mouse_position = p.mouse.get_pos()
+        if self.rect.collidepoint(mouse_position):
+            self.image = self.pressed_image
+            self.text_mode = "clicked"
+        else:
+            self.image = self.idle_image
+            self.text_mode = "unclicked"
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+        screen.blit(self.text[self.text_mode], self.text_rect)
+
+class Settings:
+    def __init__(self, mode):
+        self.screen = p.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        p.display.set_caption("SETTINGS")
+        p.display.set_icon(load_image("images/icon.png", 10, 10))
+
+        self.mode = mode
+        self.full = (monitors[0].width, monitors[0].height)
+        self.full_windowed = (1000, 1000)
+        self.background = load_image("images/wall.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        self.buttons = [
+            Button("Полноэкранное", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, width=BUTTON_WIDTH, height=BUTTON_HEIGHT,
+                   text_font=font, func=lambda: self.set_up(self.full)),
+            Button("1000x1000", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + BUTTON_HEIGHT * 1.5,
+                   width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=lambda: self.set_up(self.full_windowed))
+        ]
+
+        self.clock = p.time.Clock()
+
+        if self.mode == "settings":
+            self.run()
+        else:
+            MainMenu()
+
+
+    def run(self):
+        while True:
+            self.draw()
+            self.update()
+            self.clock.tick(FPS)
+
+    def set_up(self, MODE):
+        global SCREEN_WIDTH, SCREEN_HEIGHT
+        if MODE == self.full:
+            SCREEN_WIDTH = self.full[0]
+            SCREEN_HEIGHT = self.full[1]
+        elif MODE == self.full_windowed:
+            SCREEN_WIDTH = self.full_windowed[0]
+            SCREEN_HEIGHT = self.full_windowed[1]
+
+        self.screen = p.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.mode = "main"
+
+    def update(self):
+        self.event()
+        if self.mode == "main":
+            MainMenu()
+        for button in self.buttons:
+            button.update()
+
+    def event(self):
+        for event in p.event.get():
+            if event.type == p.KEYDOWN:
+                if event.key == p.K_ESCAPE:
+                    self.mode = "main"
+
+            for button in self.buttons:
+                if event.type == p.MOUSEBUTTONDOWN and event.button == 1:
+                    if button.rect.collidepoint(event.pos):
+                        button.func()
+
+    def draw(self):
+        self.screen.blit(self.background, (0, 0))
+        self.screen.blit(BIGfont.render(str("НАСТРОЙКИ"), True, "White"), (SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/5))
+
+        for button in self.buttons:
+            button.draw(self.screen)
+
+        p.display.flip()
+
+class MainMenu:
+    def __init__(self):
+        self.screen = p.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        p.display.set_caption("Wizard Battle (ver. 1)")
+        p.display.set_icon(load_image("images/icon.png", 10, 10))
+
+        self.mode = "menu"
+        self.game = None
+        self.settings = None
+
+        self.background = load_image("images/background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        self.icon = load_image("images/icon.png", 200, 200)
+        self.icon_rect = self.icon.get_rect()
+        self.icon_rect.center = (SCREEN_WIDTH/2 - 100, SCREEN_HEIGHT/20)
+
+        self.buttons = [
+            Button("ИГРАТЬ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.start),
+            Button("НАСТРОЙКИ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*1.5, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.settings_start),
+            Button("ВЫХОД", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*3, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.quit)
+        ]
+
+        self.clock = p.time.Clock()
+        self.run()
+
+    def run(self):
+        while True:
+            self.update()
+            self.draw()
+
+    def start(self):
+        self.mode = "game"
+        self.game = Game(self.mode)
+
+    def settings_start(self):
+        self.mode = "settings"
+        self.settings = Settings(self.mode)
+
+    def quit(self):
+        quit()
+
+    def event(self):
+        for event in p.event.get():
+            if event.type == p.QUIT:
+                quit()
+            for button in self.buttons:
+                if event.type == p.MOUSEBUTTONDOWN and event.button == 1:
+                    if button.rect.collidepoint(event.pos):
+                        button.func()
+
+
+    def update(self):
+        self.event()
+        for button in self.buttons:
+            button.update()
+
+    def draw(self):
+        self.screen.blit(self.background, (0, 0))
+        self.screen.blit(self.icon, self.icon_rect.center)
+
+        for button in self.buttons:
+            button.draw(self.screen)
+
+        p.display.flip()
+
+
+MainMenu()

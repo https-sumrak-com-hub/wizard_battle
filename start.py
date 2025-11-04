@@ -50,7 +50,283 @@ class Fireball:
             self.screen.blit(self.fireball_image, self.fireball_rect.center)
 
 
+class Player(p.sprite.Sprite):
+    def __init__(self, screen):
+        super().__init__()
+        self.screen = screen
 
+        self.anim_mode = "stay"
+        self.side = "right"
+        self.anim_type = f"{self.anim_mode}_{self.side}"
+
+        self.wizard_type = "fire"
+
+        self.animations = self.load_animations()
+
+        self.image_num = 0
+        self.image = self.animations[self.anim_type][self.image_num]
+        self.rect = self.image.get_rect()
+        self.rect.center = (100, SCREEN_HEIGHT // 2)
+        self.time = p.time.get_ticks()
+        self.interval = 480
+
+        # Заряд
+
+
+        # Список активных фаерболов
+        self.fireballs = []
+
+    def charging(self):
+        """Режим зарядки — удержание пробела."""
+        " Добавить таймер для выстрела "
+        if self.key[K_SPACE] and p.time.get_ticks() - self.time > 23:
+            self.charge_mode = True
+        else:
+
+            # если отпустил пробел после зарядки
+            if self.charge_mode and self.charge_power > 1:
+                new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.wizard_type, self.screen)
+                self.fireballs.append(new_ball)
+                self.anim_mode = "attack"
+            self.charge_mode = False
+            self.charge_power = 1
+
+        self.animation_choice()
+
+    def movement_checker(self):
+        if self.key[p.K_a] or self.key[p.K_d]:
+            self.anim_mode = "move"
+
+            if self.key[p.K_a]:
+                if self.rect.left > 0:
+                    self.side = "left"
+                    self.rect.x -= 10
+
+            if self.key[p.K_d]:
+                if self.rect.right < SCREEN_WIDTH:
+                    self.side = "right"
+                    self.rect.x += 10
+
+        elif self.key[K_LCTRL]:
+            self.anim_mode = "super"
+
+        else:
+            self.anim_mode = "stay"
+
+        self.animation_choice()
+
+    def load_animations(self):
+        idle_animations = {
+            "stay_right": [load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT) for i in
+                           range(1, 4)],
+            "stay_left": [
+                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True,
+                                 False) for i in range(1, 4)],
+            "move_right": [load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in
+                           range(1, 5)],
+            "move_left": [
+                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True,
+                                 False) for i in range(1, 5)],
+            "super_right": [
+                load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
+                load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT)
+            ],
+            "super_left": [
+                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True,
+                                 False),
+                p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT), True,
+                                 False)
+            ],
+            "attack_right": load_image(f"images/{self.wizard_type}_wizard/attack.png", PERS_WDT, PERS_HGT)
+            ,
+            "attack_left": p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/attack.png", PERS_WDT, PERS_HGT), True,
+                                 False)
+        }
+        return idle_animations
+
+    def update(self):
+        self.key = p.key.get_pressed()
+        self.charging()
+        self.movement_checker()
+
+        # обновляем фаерболы
+        for fireball in self.fireballs:
+            fireball.update()
+
+        # удаляем те, что улетели
+        self.fireballs = [f for f in self.fireballs if not f.offscreen()]
+
+    def animation_choice(self):
+        current_time = p.time.get_ticks()
+
+        if self.anim_mode in ["stay", "move"]:
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+
+            if self.image_num == len(self.animations[self.anim_type]):
+                self.image_num = 0
+
+            if current_time - self.time >= self.interval:
+                self.image_num = (self.image_num + 1) % len(self.animations[self.anim_type])
+                self.time = current_time
+
+            self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "super":
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+            self.image_num = 1
+            self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "attack":
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+            self.image = self.animations[self.anim_type]
+
+        # Зарядка
+        if self.charge_mode:
+            self.charge_power = min(self.charge_power + 2, 100)
+            self.image = self.charge_image[0] if self.side == "right" else self.charge_image[1]
+            self.image_charge_line = p.Surface((self.charge_power, 10))
+            self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
+            self.image_charge_line.fill("red")
+
+
+
+class Enemy(p.sprite.Sprite):
+    def __init__(self, screen, player):
+        super().__init__()
+        self.screen = screen
+        self.player = player
+
+        self.anim_mode = "stay"
+        self.side = "left"
+        self.anim_type = f"{self.anim_mode}_{self.side}"
+
+        self.wizard_type = random.choice(["afro", "lightning"]) #may be lightning and afro
+
+        self.animations = self.load_animations()
+
+        self.image_num = 0
+        self.image = self.animations[self.anim_type][self.image_num]
+        self.rect = self.image.get_rect()
+        self.rect.center = (SCREEN_WIDTH - 100, SCREEN_HEIGHT // 2)
+        self.time = p.time.get_ticks()
+        self.interval = 480
+
+        self.charge_mode = False
+        self.charge_power = 1
+        self.image_charge_line = p.Surface((self.charge_power, 10))
+        self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 10)
+        self.charge_image = [
+                             load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
+                             p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False)
+                            ]
+
+        self.fireballs = []
+
+    def update(self):
+        self.key = p.key.get_pressed()
+        self.charging()
+        self.movement_choice()
+
+        for fireball in self.fireballs:
+            fireball.update()
+        self.fireballs = [f for f in self.fireballs if not f.offscreen()]
+
+    def load_animations(self):
+        idle_animations = {
+            "stay_right": [ load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 4)],
+            "stay_left": [  p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/idle{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 4)],
+            "move_right": [ load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT) for i in range(1, 5)],
+            "move_left": [  p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/move{i}.png", PERS_WDT, PERS_HGT), True, False) for i in range(1, 5)],
+            "super_right": [
+                            load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT),
+                            load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT)
+                           ],
+            "super_left": [
+                            p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/charge.png", PERS_WDT, PERS_HGT), True, False),
+                            p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/down.png", PERS_WDT, PERS_HGT), True, False)
+                          ],
+            "attack_right": load_image(f"images/{self.wizard_type}_wizard/attack.png", PERS_WDT, PERS_HGT)
+                          ,
+            "attack_left": p.transform.flip(load_image(f"images/{self.wizard_type}_wizard/attack.png", PERS_WDT, PERS_HGT), True, False)
+
+        }
+        return idle_animations
+
+    def charging(self):
+        """Режим зарядки — удержание пробела."""
+        " Добавить таймер для выстрела "
+        if p.time.get_ticks() - self.time > 2:
+            self.charge_mode = True
+        else:
+            if self.charge_mode and self.charge_power > 1:
+                self.anim_mode = "attack"
+                new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.wizard_type, self.screen)
+                self.fireballs.append(new_ball)
+            self.charge_mode = False
+            self.charge_power = 1
+        self.animation_choice()
+
+    # def movement_checker(self):
+    #     if self.key[p.K_a] or self.key[p.K_d]:
+    #         self.anim_mode = "move"
+    #
+    #         if self.key[p.K_a]:
+    #             if self.rect.left > 0:
+    #                 self.side = "left"
+    #                 self.rect.x -= 10
+    #
+    #         if self.key[p.K_d]:
+    #             if self.rect.right < SCREEN_WIDTH:
+    #                 self.side = "right"
+    #                 self.rect.x += 10
+    #
+    #     elif self.key[K_LCTRL]:
+    #         self.anim_mode = "super"
+    #
+    #     else:
+    #         self.anim_mode = "stay"
+    #
+    #     self.animation_choice()
+
+
+    def movement_choice(self):
+        if self.player.anim_mode in ["stay", "move"]:
+            self.charging()
+
+
+
+
+    def animation_choice(self):
+        current_time = p.time.get_ticks()
+
+        if self.anim_mode in ["stay", "move"]:
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+
+            if self.image_num == len(self.animations[self.anim_type]):
+                self.image_num = 0
+
+            if current_time - self.time >= self.interval:
+                self.image_num = (self.image_num + 1) % len(self.animations[self.anim_type])
+                self.time = current_time
+
+            self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "super":
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+            self.image_num = 1
+            self.image = self.animations[self.anim_type][self.image_num]
+
+        if self.anim_mode == "attack":
+            self.anim_type = f"{self.anim_mode}_{self.side}"
+            self.image = self.animations[self.anim_type]
+
+        # Зарядка
+        if self.charge_mode:
+            self.charge_power = min(self.charge_power + 2, 100)
+            self.image = self.charge_image[0] if self.side == "right" else self.charge_image[1]
+            self.image_charge_line = p.Surface((self.charge_power, 10))
+            self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
+            self.image_charge_line.fill("red")
 
 
 class Player(p.sprite.Sprite):
@@ -272,7 +548,7 @@ class Game:
         p.display.set_caption("Wizard Battle")
         p.display.set_icon(load_image("images/icon.png", 10, 10))
 
-        self.background = load_image("images/background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.background = load_image("images/location0.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
         self.player = Player(self.screen)
         self.clock = p.time.Clock()
