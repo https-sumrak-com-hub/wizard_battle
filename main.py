@@ -583,4 +583,5 @@ class MainMenu:
 
         p.display.flip()
 
-MainMenu()
+if __name__ == "__main__":
+    MainMenu()
