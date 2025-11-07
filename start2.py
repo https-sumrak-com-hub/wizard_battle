@@ -30,12 +30,14 @@ def load_image(file, width, height):
     image = p.transform.scale(image, (width, height))
     return image
 
-def text_render(text):
-    return font.render(str(text), True, "black")
+def text_render(text, font=font, color="black"):
+    return font.render(str(text), True, color)
 
-class Fireball:
+class Fireball(p.sprite.Sprite):
     def __init__(self, coord, side, charge_power, way, screen):
+        super().__init__()
         self.screen = screen
+
         self.side = side
         self.power = charge_power
         self.speed = 2 + self.power // 10  # чем больше заряд, тем быстрее летит
@@ -46,17 +48,17 @@ class Fireball:
 
         }
         self.fireball_image = self.fireball_images[self.side]
-        self.fireball_rect = self.fireball_image.get_rect()
+        self.rect = self.fireball_image.get_rect()
 
         # позиция появления
         if self.side == "r":
-            self.fireball_rect.center = (
+            self.rect.center = (
                 coord[0] + PERS_WDT - PERS_WDT // 4,
                 coord[1] + PERS_HGT // 3
             )
         else:
 
-            self.fireball_rect.center = (
+            self.rect.center = (
                 coord[0] + PERS_WDT // 4,
                 coord[1] + PERS_HGT // 3
             )
@@ -64,22 +66,23 @@ class Fireball:
 
     def move(self):
         if self.side == "r":
-            self.fireball_rect.x += self.speed
+            self.rect.x += self.speed
         else:
-            self.fireball_rect.x -= self.speed
+            self.rect.x -= self.speed
 
     def update(self):
         self.move()
         self.draw()
 
     def draw(self):
-        self.screen.blit(self.fireball_image, self.fireball_rect)
+        self.screen.blit(self.fireball_image, self.rect)
 
     def offscreen(self):
-        return self.fireball_rect.right < 0 or self.fireball_rect.left > SCREEN_WIDTH
+        return self.rect.right < 0 or self.rect.left > SCREEN_WIDTH
 
 class Personage(p.sprite.Sprite):
     def __init__(self, screen, player_number):
+        super().__init__()
         self.screen = screen
         self.p_num = str(player_number)
         self.key = p.key.get_pressed()
@@ -99,14 +102,23 @@ class Personage(p.sprite.Sprite):
 
         self.wiz = random.choice(self.wiz)
 
+        self.charge_colors = {
+            "afro": "red",
+            "fire": "orange",
+            "lightning": "blue"
+        }
+
         self.way = f"images/{self.wiz}"
 
         self.anims = self.animations_storage()
 
+        self.p_color = ""
         if self.p_num == "1":
             self.side = "r"
+            self.p_color = "blue"
         else:
             self.side = "l"
+            self.p_color = "red"
 
         self.move_type = "stay"
         self.img_mode = f"{self.move_type}_{self.side}"
@@ -118,7 +130,22 @@ class Personage(p.sprite.Sprite):
         self.charge_mode = False
         self.charge_power = 1
         self.image_charge_line = p.Surface((self.charge_power, 10))
-        self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 10)
+        self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 5)
+
+        self.name = text_render(f"{self.p_num} PLAYER", BIGfont, self.p_color)
+
+        self.BIGhp_line = 5
+
+        self.min_hp = 10*self.BIGhp_line
+        self.HEALTH = 100*self.BIGhp_line
+
+        self.hp_line = p.Surface((self.HEALTH, 35))
+        self.hp_line_coords = {
+            "1": (20, 20),
+            "2": (SCREEN_WIDTH - self.HEALTH - 20, 20)
+        }
+        self.hp_line_rect = (self.hp_line_coords[self.p_num])
+
 
         self.fireballs = []
 
@@ -152,7 +179,7 @@ class Personage(p.sprite.Sprite):
             self.charge_power = min(self.charge_power + 0.6, 100)
             self.image_charge_line = p.Surface((self.charge_power, 7))
             self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
-            self.image_charge_line.fill("red")
+            self.image_charge_line.fill(self.charge_colors[self.wiz])
 
         else:
 
@@ -202,7 +229,7 @@ class Personage(p.sprite.Sprite):
 
         elif self.key[self.keys[self.p_num][3]]:
             self.move_type = "super"
-            self.img_num = 1 #charging image number in animations_storage
+            self.img_num = 1 #charging image number in self.anims[self.img_mode]
             self.img_mode = f"{self.move_type}_{self.side}"
             self.img = self.anims[self.img_mode][self.img_num]
 
@@ -250,6 +277,7 @@ class Game:
             load_image(f"images/location{i}.png", SCREEN_WIDTH, SCREEN_HEIGHT) for i in range(3)
         ]
 
+        self.wall_negative = load_image("images/wall_negative.png", SCREEN_WIDTH, 100)
         self.background = random.choice(self.locations)
         self.player1 = Personage(self.screen, 1)
         self.player2 = Personage(self.screen, 2)
@@ -272,13 +300,26 @@ class Game:
         for event in p.event.get():
             if event.type == p.KEYDOWN:
                 if event.key == p.K_ESCAPE:
-                    self.mode = "menu"
+                    self.mode = "main"
                     MainMenu()
 
     def update(self):
         #go to update current players
         self.player1.update()
         self.player2.update()
+        if self.player1.fireballs or self.player2.fireballs:
+            self.UNHEALWITHFIREBALLS()
+
+    def UNHEALWITHFIREBALLS(self):
+        for fireball in self.player1.fireballs:
+            if p.sprite.spritecollide(fireball, [self.player2], False, p.sprite.collide_rect_ratio(0.6)):
+                self.player2.HEALTH -= fireball.power // 10
+                self.player1.fireballs.remove(fireball)
+                
+        for fireball in self.player2.fireballs:
+            if p.sprite.spritecollide(fireball, [self.player1], False, p.sprite.collide_rect_ratio(0.6)):
+                self.player1.HEALTH -= fireball.power // 10
+                self.player2.fireballs.remove(fireball)
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
@@ -293,12 +334,32 @@ class Game:
         if self.player2.charge_mode:
             self.screen.blit(self.player2.image_charge_line, self.player2.rect_charge_line)
 
+        self.screen.blit(self.wall_negative, (0, 0))
+
+        if self.player1.HEALTH > self.player1.min_hp:
+            self.player1.hp_line.fill("green")
+        else:
+            self.player1.hp_line.fill("red")
+
+        self.screen.blit(self.player1.hp_line, self.player1.hp_line_rect)
+        self.screen.blit(self.player1.name, (SCREEN_WIDTH // 2 // 2, 20))
+
+        if self.player2.HEALTH > self.player2.min_hp:
+            self.player2.hp_line.fill("green")
+        else:
+            self.player2.hp_line.fill("red")
+
+        self.screen.blit(self.player2.hp_line, self.player2.hp_line_rect)
+        self.screen.blit(self.player2.name, (SCREEN_WIDTH//2 + 30, 20))
+
         #blit current fireballs
         for fireball in self.player1.fireballs:
             fireball.draw()
 
         for fireball in self.player2.fireballs:
             fireball.draw()
+
+
 
         p.display.flip()
 
@@ -479,6 +540,5 @@ class MainMenu:
             button.draw(self.screen)
 
         p.display.flip()
-
 
 MainMenu()
