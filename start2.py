@@ -22,16 +22,14 @@ BUTTON_HEIGHT = SCREEN_WIDTH/20
 FPS = 120
 
 font = p.font.Font(None, 40)
-BIGfont = p.font.Font(None, 100)
-
 
 def load_image(file, width, height):
     image = p.image.load(file).convert_alpha()
     image = p.transform.scale(image, (width, height))
     return image
 
-def text_render(text, font=font, color="black"):
-    return font.render(str(text), True, color)
+def text_render(text, size=40, color="black"):
+    return p.font.Font(None, int(size)).render(str(text), True, color)
 
 class Fireball(p.sprite.Sprite):
     def __init__(self, coord, side, charge_power, way, screen):
@@ -132,20 +130,21 @@ class Personage(p.sprite.Sprite):
         self.image_charge_line = p.Surface((self.charge_power, 10))
         self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + PERS_HGT / 5)
 
-        self.name = text_render(f"{self.p_num} PLAYER", BIGfont, self.p_color)
+        self.name = text_render(f"{self.p_num} PLAYER", 50, self.p_color)
+        self.name_rect = self.name.get_rect()
 
-        self.BIGhp_line = 5
-
-        self.min_hp = 10*self.BIGhp_line
-        self.HEALTH = 100*self.BIGhp_line
+        self.min_hp = 10
+        self.HEALTH = 100
 
         self.hp_line = p.Surface((self.HEALTH, 35))
         self.hp_line_coords = {
             "1": (20, 20),
             "2": (SCREEN_WIDTH - self.HEALTH - 20, 20)
         }
-        self.hp_line_rect = (self.hp_line_coords[self.p_num])
+        self.hp_line_rect = self.hp_line.get_rect()
+        self.hp_line_coord = (self.hp_line_coords[self.p_num])
 
+        self.HEALTH_ = text_render(self.HEALTH, self.hp_line_rect[3] / 0.85, "black")
 
         self.fireballs = []
 
@@ -154,6 +153,8 @@ class Personage(p.sprite.Sprite):
         self.charging()
         self.move()
 
+        self.HEALTH_ = text_render(self.HEALTH, self.hp_line_rect[3] / 0.85, "black")
+        self.dead()
         #go to update fireballs
         for fireball in self.fireballs:
             fireball.update()
@@ -176,20 +177,27 @@ class Personage(p.sprite.Sprite):
         curr_timer = p.time.get_ticks()
         if self.key[self.keys[self.p_num][3]] and curr_timer > self.timer and self.move_type == "super" and self.img_num == 1: #упростить условие
             self.charge_mode = True
-            self.charge_power = min(self.charge_power + 0.6, 100)
-            self.image_charge_line = p.Surface((self.charge_power, 7))
-            self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT / 3, self.rect.topleft[1] + 10)
+            self.charge_power = min(self.charge_power + 1, 100)
+            self.image_charge_line = p.Surface((self.charge_power, 10))
+            self.rect_charge_line = (self.rect.topleft[0] + PERS_WDT/3, self.rect.topleft[1] + 10)
             self.image_charge_line.fill(self.charge_colors[self.wiz])
 
         else:
 
             # если отпустил пробел после зарядки
-            if self.charge_mode and 1 <= self.charge_power <= 100:
+            if self.charge_mode:
                 new_ball = Fireball(self.rect.topleft, self.side, self.charge_power, self.way, self.screen)
                 self.fireballs.append(new_ball)
                 self.timer = curr_timer + 600
             self.charge_mode = False
             self.charge_power = 1
+
+    def dead(self):
+        if self.HEALTH == 0:
+            self.img_mode = "dead"
+            self.img_num = 0
+            self.img = self.anims[self.img_mode][self.img_num]
+
 
     def move(self):
         if self.key[self.keys[self.p_num][0]] or self.key[self.keys[self.p_num][1]]:
@@ -261,7 +269,8 @@ class Personage(p.sprite.Sprite):
                 p.transform.flip(load_image(f"{self.way}/attack.png", PERS_WDT, PERS_HGT), True, False),
                 p.transform.flip(load_image(f"{self.way}/charge.png", PERS_WDT, PERS_HGT), True, False),
                 p.transform.flip(load_image(f"{self.way}/sit.png", PERS_WDT, PERS_HGT), True, False)
-            ]
+            ],
+            "dead": [load_image("images/empty.png", 1, 1)]
         }
 
         return animation_images
@@ -312,14 +321,24 @@ class Game:
 
     def UNHEALWITHFIREBALLS(self):
         for fireball in self.player1.fireballs:
-            if p.sprite.spritecollide(fireball, [self.player2], False, p.sprite.collide_rect_ratio(0.6)):
-                self.player2.HEALTH -= fireball.power // 10
-                self.player1.fireballs.remove(fireball)
+            if self.player2.img_mode != "dead" and self.player2.move_type != "super" and self.player2.img_num != 2:
+                if p.sprite.spritecollide(fireball, [self.player2], False, p.sprite.collide_rect_ratio(0.6)):
+                    if self.player2.HEALTH - fireball.power // 5  > 0:
+                        self.player2.HEALTH -= fireball.power // 5
+                    else:
+                        self.player2.HEALTH = 0
+
+                    self.player1.fireballs.remove(fireball)
                 
         for fireball in self.player2.fireballs:
-            if p.sprite.spritecollide(fireball, [self.player1], False, p.sprite.collide_rect_ratio(0.6)):
-                self.player1.HEALTH -= fireball.power // 10
-                self.player2.fireballs.remove(fireball)
+            if self.player1.img_mode != "dead" and self.player1.move_type != "super" and self.player1.img_num != 2:
+                if p.sprite.spritecollide(fireball, [self.player1], False, p.sprite.collide_rect_ratio(0.6)):
+                    if self.player1.HEALTH - fireball.power // 5 > 0:
+                        self.player1.HEALTH -= fireball.power // 5
+                    else:
+                        self.player1.HEALTH = 0
+
+                    self.player2.fireballs.remove(fireball)
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
@@ -341,16 +360,18 @@ class Game:
         else:
             self.player1.hp_line.fill("red")
 
-        self.screen.blit(self.player1.hp_line, self.player1.hp_line_rect)
-        self.screen.blit(self.player1.name, (SCREEN_WIDTH // 2 // 2, 20))
+        self.screen.blit(self.player1.hp_line, self.player1.hp_line_coord)
+        self.screen.blit(self.player1.HEALTH_, self.player1.hp_line_coord)
+        self.screen.blit(self.player1.name, (SCREEN_WIDTH//2 - self.player1.name_rect[2]*2, 20))
 
         if self.player2.HEALTH > self.player2.min_hp:
             self.player2.hp_line.fill("green")
         else:
             self.player2.hp_line.fill("red")
 
-        self.screen.blit(self.player2.hp_line, self.player2.hp_line_rect)
-        self.screen.blit(self.player2.name, (SCREEN_WIDTH//2 + 30, 20))
+        self.screen.blit(self.player2.hp_line, self.player2.hp_line_coord)
+        self.screen.blit(self.player2.HEALTH_, self.player2.hp_line_coord)
+        self.screen.blit(self.player2.name, (SCREEN_WIDTH//2 + self.player2.name_rect[2], 20))
 
         #blit current fireballs
         for fireball in self.player1.fireballs:
@@ -359,6 +380,15 @@ class Game:
         for fireball in self.player2.fireballs:
             fireball.draw()
 
+        if self.player1.HEALTH == 0:
+            self.mode = "menu"
+            self.screen.blit(text_render("2 PLAYER WINS!", SCREEN_WIDTH // 25, "red"), (SCREEN_WIDTH / 2 - SCREEN_WIDTH // 25 * 2.5, SCREEN_HEIGHT / 2))
+
+
+
+        if self.player2.HEALTH == 0:
+            self.mode = "menu"
+            self.screen.blit(text_render("1 PLAYER WINS!", SCREEN_WIDTH // 25, "blue"), (SCREEN_WIDTH / 2 - SCREEN_WIDTH // 25 * 2.5, SCREEN_HEIGHT / 2))
 
 
         p.display.flip()
@@ -411,16 +441,23 @@ class Settings:
         p.display.set_caption("SETTINGS")
         p.display.set_icon(load_image("images/icon.png", 10, 10))
 
+        self.settings_text = text_render("НАСТРОЙКИ", SCREEN_HEIGHT//10, "white")
+        self.settings_text_rect = self.settings_text.get_rect()
+
         self.mode = mode
         self.full = (monitors[0].width, monitors[0].height)
-        self.full_windowed = (1000, 1000)
+        self.s1280 = (1280, 1024)
+        self.s1080 = (1080, 1080)
         self.background = load_image("images/wall.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
         self.buttons = [
             Button("Полноэкранное", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, width=BUTTON_WIDTH, height=BUTTON_HEIGHT,
-                   text_font=font, func=lambda: self.set_up(self.full)),
-            Button("1000x1000", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + BUTTON_HEIGHT * 1.5,
-                   width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=lambda: self.set_up(self.full_windowed))
+                   text_font=p.font.Font(None, SCREEN_HEIGHT//30), func=lambda: self.set_up(self.full)),
+            Button("1280x1024", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + BUTTON_HEIGHT * 1.5,
+                   width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=p.font.Font(None, SCREEN_HEIGHT//30), func=lambda: self.set_up(self.s1280)),
+            Button("1080x1080", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + BUTTON_HEIGHT * 3,
+                   width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=p.font.Font(None, SCREEN_HEIGHT // 30),
+                   func=lambda: self.set_up(self.s1080))
         ]
 
         self.clock = p.time.Clock()
@@ -442,9 +479,14 @@ class Settings:
         if MODE == self.full:
             SCREEN_WIDTH = self.full[0]
             SCREEN_HEIGHT = self.full[1]
-        elif MODE == self.full_windowed:
-            SCREEN_WIDTH = self.full_windowed[0]
-            SCREEN_HEIGHT = self.full_windowed[1]
+
+        elif MODE == self.s1280:
+            SCREEN_WIDTH = self.s1280[0]
+            SCREEN_HEIGHT = self.s1280[1]
+
+        elif MODE == self.s1080:
+            SCREEN_WIDTH = self.s1080[0]
+            SCREEN_HEIGHT = self.s1080[1]
 
         self.screen = p.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.mode = "main"
@@ -469,7 +511,7 @@ class Settings:
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
-        self.screen.blit(BIGfont.render(str("НАСТРОЙКИ"), True, "White"), (SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/5))
+        self.screen.blit(self.settings_text, (SCREEN_WIDTH / 2 - self.settings_text_rect[2] / 2, SCREEN_HEIGHT / 5))
 
         for button in self.buttons:
             button.draw(self.screen)
@@ -493,9 +535,9 @@ class MainMenu:
         self.icon_rect.center = (SCREEN_WIDTH/2 - 100, SCREEN_HEIGHT/20)
 
         self.buttons = [
-            Button("ИГРАТЬ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.start),
-            Button("НАСТРОЙКИ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*1.5, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.settings_start),
-            Button("ВЫХОД", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*3, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=self.quit)
+            Button("ИГРАТЬ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=p.font.Font(None, SCREEN_HEIGHT//30), func=self.start),
+            Button("НАСТРОЙКИ", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*1.5, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=p.font.Font(None, SCREEN_HEIGHT//30), func=self.settings_start),
+            Button("ВЫХОД", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + BUTTON_HEIGHT*3, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=p.font.Font(None, SCREEN_HEIGHT//30), func=self.quit)
         ]
 
         self.clock = p.time.Clock()
